@@ -4,8 +4,19 @@
 @source '../../storage/framework/views/*.php';
 
 @theme inline {
+    --color-bg: #faf9f8;
+    --color-surface: #ffffff;
+    --color-ink: #171717;
+    --color-primary: #1f4e5f;
+    --color-amber: #c97d1f;
+    --color-green: #3d6b4b;
+
     --font-sans:
-        Instrument Sans, ui-sans-serif, system-ui, sans-serif,
+        'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-display:
+        'Space Grotesk', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
 }

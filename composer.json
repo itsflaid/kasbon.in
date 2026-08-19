@@ -13,7 +13,7 @@
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/framework": "^13.17",
         "laravel/reverb": "^1.0",
-        "laravel/socialite": "^5.29",
+        "laravel/socialite": "^5.30",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14"
     },
@@ -53,7 +53,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"npm run dev\" --names='server,queue,vite'"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74,#86efac\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan reverb:start\" \"npm run dev\" --names='server,queue,reverb,vite'"
         ],
         "lint": [
             "pint --parallel"

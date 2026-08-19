@@ -13,6 +13,8 @@
         "socialite-development",
         "wayfinder-development",
         "pest-testing",
+        "echo-vue-development",
+        "echo-development",
         "tailwindcss-development"
     ]
 }
