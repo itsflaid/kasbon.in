@@ -28,4 +28,6 @@ yarn-error.log
 /.vscode
 /.zed
 
-task.md
+
+prd/
+warung_utang
