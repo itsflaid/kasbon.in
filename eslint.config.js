@@ -1,8 +1,7 @@
 import stylistic from '@stylistic/eslint-plugin';
-import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript';
 import prettier from 'eslint-config-prettier/flat';
 import importPlugin from 'eslint-plugin-import';
-import vue from 'eslint-plugin-vue';
+import tseslint from 'typescript-eslint';
 
 const controlStatements = [
     'if',
@@ -21,9 +20,8 @@ const paddingAroundControl = [
     ]),
 ];
 
-export default defineConfigWithVueTs(
-    vue.configs['flat/essential'],
-    vueTsConfigs.recommended,
+export default tseslint.config(
+    ...tseslint.configs.recommended,
     {
         plugins: {
             import: importPlugin,
@@ -38,7 +36,6 @@ export default defineConfigWithVueTs(
             },
         },
         rules: {
-            'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/consistent-type-imports': [
                 'error',
