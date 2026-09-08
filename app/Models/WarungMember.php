@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use Database\Factories\WarungMemberFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WarungMember extends Model
 {
+    /** @use HasFactory<WarungMemberFactory> */
+    use HasFactory;
+
     protected $fillable = ['warung_id', 'user_id', 'role', 'can_edit_any_entry', 'is_active'];
 
     protected function casts(): array

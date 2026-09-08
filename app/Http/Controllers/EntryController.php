@@ -8,6 +8,7 @@ use App\Models\Debtor;
 use App\Models\Entry;
 use App\Models\Warung;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class EntryController extends Controller
 {
@@ -66,13 +67,18 @@ class EntryController extends Controller
         return response()->json(['entry' => $entry], 201);
     }
 
-    public function update(StoreEntryRequest $request, Entry $entry)
+    public function update(Request $request, Entry $entry)
     {
-        $this->authorize('update', $entry);
+        Gate::authorize('update', $entry);
+
+        $request->validate([
+            'amount' => ['required', 'numeric', 'min:1'],
+            'item_description' => ['nullable', 'string'],
+        ]);
 
         $oldValue = $entry->toArray();
 
-        $entry->update($request->validated() + [
+        $entry->update($request->only(['amount', 'item_description']) + [
             'edited_by_user_id' => auth()->id(),
         ]);
 
@@ -90,7 +96,7 @@ class EntryController extends Controller
 
     public function void(Entry $entry)
     {
-        $this->authorize('update', $entry);
+        Gate::authorize('update', $entry);
 
         $oldValue = $entry->toArray();
 
