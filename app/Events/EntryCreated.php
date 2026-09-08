@@ -19,4 +19,9 @@ class EntryCreated implements ShouldBroadcast
     {
         return [new PrivateChannel('warung.'.$this->entry->warung_id)];
     }
+
+    public function broadcastWith(): array
+    {
+        return ['entry' => $this->entry->toArray()];
+    }
 }
