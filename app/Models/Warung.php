@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Database\Factories\WarungFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,6 +11,9 @@ use Illuminate\Support\Str;
 
 class Warung extends Model
 {
+    /** @use HasFactory<WarungFactory> */
+    use HasFactory;
+
     protected $fillable = ['name', 'owner_id', 'invite_code'];
 
     protected static function booted(): void
