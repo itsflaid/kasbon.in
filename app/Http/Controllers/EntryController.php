@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\EntryCreated;
 use App\Http\Requests\StoreEntryRequest;
 use App\Models\ActivityLog;
 use App\Models\Debtor;
@@ -30,6 +31,8 @@ class EntryController extends Controller
 
         $entry = Entry::create($data);
 
+        event(new EntryCreated($entry));
+
         ActivityLog::create([
             'warung_id' => $warung->id,
             'entry_id' => $entry->id,
@@ -55,6 +58,8 @@ class EntryController extends Controller
         $data['recorded_by_user_id'] = auth()->id();
 
         $entry = Entry::create($data);
+
+        event(new EntryCreated($entry));
 
         ActivityLog::create([
             'warung_id' => $warung->id,
