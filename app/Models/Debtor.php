@@ -26,4 +26,21 @@ class Debtor extends Model
     {
         return $this->hasMany(Entry::class);
     }
+
+    public function hasIncompletePrice(): bool
+    {
+        return $this->entries()
+            ->where('type', 'debt')
+            ->where('is_voided', false)
+            ->whereNull('amount')
+            ->exists();
+    }
+
+    public function total(): int
+    {
+        $debt = $this->entries()->debts()->active()->sum('amount');
+        $paid = $this->entries()->payments()->active()->sum('amount');
+
+        return $debt - $paid;
+    }
 }
