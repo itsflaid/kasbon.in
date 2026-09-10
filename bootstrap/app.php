@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\SetActiveWarung;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,6 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
             AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        $middleware->alias([
+            'set-warung' => SetActiveWarung::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
