@@ -7,9 +7,14 @@
     --color-bg: #faf9f8;
     --color-surface: #ffffff;
     --color-ink: #171717;
+    --color-muted: #77746d;
     --color-primary: #1f4e5f;
+    --color-primary-soft: #e4edee;
     --color-amber: #c97d1f;
+    --color-amber-soft: #fbf0df;
     --color-green: #3d6b4b;
+    --color-green-soft: #e7f0e9;
+    --color-rule: #e7e4dc;
 
     --font-sans:
         'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif,

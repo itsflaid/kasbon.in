@@ -76,5 +76,5 @@ it('redirects home on socialite failure', function () {
 it('protects dashboard with auth middleware', function () {
     $response = $this->get('/dashboard');
 
-    $response->assertRedirect('/auth/google/redirect');
+    $response->assertRedirect(route('login'));
 });
