@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Warung;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 
 class WarungController extends Controller
 {
@@ -33,6 +34,16 @@ class WarungController extends Controller
 
     public function join(Request $request)
     {
+        $key = 'warung-join:'.auth()->id();
+
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            return response()->json([
+                'error' => 'Terlalu banyak percobaan, coba lagi sebentar.',
+            ], 429);
+        }
+
+        RateLimiter::hit($key, 60);
+
         $request->validate([
             'code' => 'required|string|size:8',
         ]);

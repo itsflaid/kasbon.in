@@ -41,6 +41,8 @@ class EntryController extends Controller
             'new_value' => $entry->toArray(),
         ]);
 
+        $debtor->forgetTotalCache();
+
         return response()->json(['entry' => $entry], 201);
     }
 
@@ -69,6 +71,8 @@ class EntryController extends Controller
             'new_value' => $entry->toArray(),
         ]);
 
+        Debtor::find($data['debtor_id'])?->forgetTotalCache();
+
         return response()->json(['entry' => $entry], 201);
     }
 
@@ -96,6 +100,8 @@ class EntryController extends Controller
             'new_value' => $entry->fresh()->toArray(),
         ]);
 
+        $entry->debtor->forgetTotalCache();
+
         return response()->json(['entry' => $entry]);
     }
 
@@ -119,6 +125,8 @@ class EntryController extends Controller
             'old_value' => $oldValue,
             'new_value' => $entry->fresh()->toArray(),
         ]);
+
+        $entry->debtor->forgetTotalCache();
 
         return response()->json(['success' => true]);
     }
