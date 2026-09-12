@@ -14,8 +14,8 @@ Route::get('/auth/google/callback', [AuthController::class, 'callback'])->middle
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
 
-    Route::post('/warungs/{warung}/entries', [EntryController::class, 'store'])->name('entries.store');
-    Route::post('/warungs/{warung}/entries/confirm', [EntryController::class, 'confirmStore'])->name('entries.confirm-store');
-    Route::put('/entries/{entry}', [EntryController::class, 'update'])->name('entries.update');
-    Route::post('/entries/{entry}/void', [EntryController::class, 'void'])->name('entries.void');
+    Route::post('/warungs/{warung}/entries', [EntryController::class, 'store'])->name('entries.store')->middleware('throttle:30,1');
+    Route::post('/warungs/{warung}/entries/confirm', [EntryController::class, 'confirmStore'])->name('entries.confirm-store')->middleware('throttle:30,1');
+    Route::put('/entries/{entry}', [EntryController::class, 'update'])->name('entries.update')->middleware('throttle:30,1');
+    Route::post('/entries/{entry}/void', [EntryController::class, 'void'])->name('entries.void')->middleware('throttle:30,1');
 });

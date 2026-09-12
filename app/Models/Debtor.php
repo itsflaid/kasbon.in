@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 
 class Debtor extends Model
 {
@@ -43,9 +44,16 @@ class Debtor extends Model
 
     public function total(): int
     {
-        $debt = $this->entries()->debts()->active()->sum('amount');
-        $paid = $this->entries()->payments()->active()->sum('amount');
+        return Cache::remember("debtor.{$this->id}.total", 300, function () {
+            $debt = $this->entries()->debts()->active()->sum('amount');
+            $paid = $this->entries()->payments()->active()->sum('amount');
 
-        return $debt - $paid;
+            return $debt - $paid;
+        });
+    }
+
+    public function forgetTotalCache(): void
+    {
+        Cache::forget("debtor.{$this->id}.total");
     }
 }
