@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Warung;
 use App\Models\WarungMember;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Component;
 
 class Anggota extends Component
@@ -27,13 +28,13 @@ class Anggota extends Component
 
     public function toggleEditor(WarungMember $member): void
     {
-        abort_unless($this->isOwner, 403);
+        Gate::authorize('manageMembers', $this->warung);
         $member->update(['can_edit_any_entry' => ! $member->can_edit_any_entry]);
     }
 
     public function kick(WarungMember $member): void
     {
-        abort_unless($this->isOwner, 403);
+        Gate::authorize('manageMembers', $this->warung);
         abort_if($member->user_id === auth()->id(), 400);
         $member->update(['is_active' => false]);
     }

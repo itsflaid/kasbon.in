@@ -16,7 +16,7 @@ Route::get('/login', fn () => redirect()->route('google.redirect'))->name('login
 Route::get('/auth/google/redirect', [AuthController::class, 'redirect'])->name('google.redirect');
 Route::get('/auth/google/callback', [AuthController::class, 'callback'])->middleware('throttle:10,1');
 
-Route::get('/pilih-warung', PilihWarung::class)->name('pilih-warung');
+Route::get('/pilih-warung', PilihWarung::class)->middleware('auth')->name('pilih-warung');
 
 Route::middleware(['auth', 'set-warung'])->group(function () {
     Route::get('/dashboard', Dashboard::class)->name('dashboard');

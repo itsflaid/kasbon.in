@@ -2,76 +2,41 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\EntryCreated;
 use App\Http\Requests\StoreEntryRequest;
 use App\Models\ActivityLog;
-use App\Models\Debtor;
 use App\Models\Entry;
 use App\Models\Warung;
+use App\Services\EntryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class EntryController extends Controller
 {
-    public function store(StoreEntryRequest $request, Warung $warung)
+    public function store(StoreEntryRequest $request, Warung $warung, EntryService $entryService)
     {
-        $data = $request->validated();
-        $data['warung_id'] = $warung->id;
-        $data['recorded_by_user_id'] = auth()->id();
+        $result = $entryService->create($warung, $request->validated(), $request->user());
 
-        $debtor = Debtor::findOrFail($data['debtor_id']);
-
-        if ($data['type'] === 'payment' && isset($data['amount']) && $data['amount'] > $debtor->total()) {
+        if ($result['status'] === 'warning') {
             return response()->json([
-                'warning' => 'Jumlah bayar melebihi sisa utang. Konfirmasi untuk tetap melanjutkan.',
-                'overpayment' => $data['amount'] - $debtor->total(),
-                'data' => $data,
+                'warning' => $result['message'],
+                'overpayment' => $result['overpayment'],
+                'data' => $result['data'],
             ], 200);
         }
 
-        $entry = Entry::create($data);
-
-        event(new EntryCreated($entry));
-
-        ActivityLog::create([
-            'warung_id' => $warung->id,
-            'entry_id' => $entry->id,
-            'user_id' => auth()->id(),
-            'action' => $data['type'] === 'debt' ? 'created_debt' : 'created_payment',
-            'new_value' => $entry->toArray(),
-        ]);
-
-        $debtor->forgetTotalCache();
-
-        return response()->json(['entry' => $entry], 201);
+        return response()->json(['entry' => $result['entry']], 201);
     }
 
-    public function confirmStore(Warung $warung, Request $request)
+    public function confirmStore(Warung $warung, Request $request, EntryService $entryService)
     {
-        $request->validate([
+        $data = $request->validate([
             'debtor_id' => 'required|exists:debtors,id',
             'type' => 'required|in:debt,payment',
             'item_description' => 'nullable|string|required_if:type,debt',
-            'amount' => 'nullable|numeric|min:1|required_if:type,payment',
+            'amount' => 'nullable|integer|min:1|required_if:type,payment',
         ]);
 
-        $data = $request->only(['debtor_id', 'type', 'item_description', 'amount']);
-        $data['warung_id'] = $warung->id;
-        $data['recorded_by_user_id'] = auth()->id();
-
-        $entry = Entry::create($data);
-
-        event(new EntryCreated($entry));
-
-        ActivityLog::create([
-            'warung_id' => $warung->id,
-            'entry_id' => $entry->id,
-            'user_id' => auth()->id(),
-            'action' => $data['type'] === 'debt' ? 'created_debt' : 'created_payment',
-            'new_value' => $entry->toArray(),
-        ]);
-
-        Debtor::find($data['debtor_id'])?->forgetTotalCache();
+        $entry = $entryService->confirmCreate($warung, $data, $request->user());
 
         return response()->json(['entry' => $entry], 201);
     }
@@ -81,7 +46,7 @@ class EntryController extends Controller
         Gate::authorize('update', $entry);
 
         $request->validate([
-            'amount' => ['required', 'numeric', 'min:1'],
+            'amount' => ['required', 'integer', 'min:1'],
             'item_description' => ['nullable', 'string'],
         ]);
 
