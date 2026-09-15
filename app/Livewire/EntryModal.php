@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Debtor;
 use App\Models\Warung;
+use App\Services\EntryService;
 use Livewire\Component;
 
 class EntryModal extends Component
@@ -27,6 +28,11 @@ class EntryModal extends Component
     public ?array $pendingData = null;
 
     public string $warning = '';
+
+    public function mount(Warung $warung): void
+    {
+        $this->warung = $warung;
+    }
 
     public function getDebtorsProperty()
     {
@@ -68,11 +74,11 @@ class EntryModal extends Component
             'amount' => $this->amount,
         ];
 
-        $response = $this->httpPost(route('entries.store', $this->warung), $data);
+        $result = app(EntryService::class)->create($this->warung, $data, auth()->user());
 
-        if ($response['status'] === 200 && isset($response['body']['warning'])) {
-            $this->warning = $response['body']['warning'];
-            $this->pendingData = $data;
+        if ($result['status'] === 'warning') {
+            $this->warning = $result['message'];
+            $this->pendingData = $result['data'];
             $this->showConfirm = true;
 
             return;
@@ -84,7 +90,7 @@ class EntryModal extends Component
     public function confirmSubmit(): void
     {
         if ($this->pendingData) {
-            $this->httpPost(route('entries.confirm-store', $this->warung), $this->pendingData);
+            app(EntryService::class)->confirmCreate($this->warung, $this->pendingData, auth()->user());
         }
 
         $this->close();
@@ -92,7 +98,7 @@ class EntryModal extends Component
 
     public function close(): void
     {
-        $this->reset();
+        $this->resetExcept('warung');
         $this->dispatch('close-modal');
     }
 
