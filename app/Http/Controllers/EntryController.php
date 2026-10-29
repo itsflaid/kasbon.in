@@ -3,16 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreEntryRequest;
-use App\Models\ActivityLog;
 use App\Models\Entry;
 use App\Models\Warung;
 use App\Services\EntryService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class EntryController extends Controller
 {
-    public function store(StoreEntryRequest $request, Warung $warung, EntryService $entryService)
+    public function store(StoreEntryRequest $request, Warung $warung, EntryService $entryService): JsonResponse
     {
         $result = $entryService->create($warung, $request->validated(), $request->user());
 
@@ -27,7 +27,7 @@ class EntryController extends Controller
         return response()->json(['entry' => $result['entry']], 201);
     }
 
-    public function confirmStore(Warung $warung, Request $request, EntryService $entryService)
+    public function confirmStore(Warung $warung, Request $request, EntryService $entryService): JsonResponse
     {
         $data = $request->validate([
             'debtor_id' => 'required|exists:debtors,id',
@@ -41,57 +41,25 @@ class EntryController extends Controller
         return response()->json(['entry' => $entry], 201);
     }
 
-    public function update(Request $request, Entry $entry)
+    public function update(Request $request, Entry $entry, EntryService $entryService): JsonResponse
     {
         Gate::authorize('update', $entry);
 
-        $request->validate([
+        $data = $request->validate([
             'amount' => ['required', 'integer', 'min:1'],
             'item_description' => ['nullable', 'string'],
         ]);
 
-        $oldValue = $entry->toArray();
-
-        $entry->update($request->only(['amount', 'item_description']) + [
-            'edited_by_user_id' => auth()->id(),
-        ]);
-
-        ActivityLog::create([
-            'warung_id' => $entry->warung_id,
-            'entry_id' => $entry->id,
-            'user_id' => auth()->id(),
-            'action' => 'updated_entry',
-            'old_value' => $oldValue,
-            'new_value' => $entry->fresh()->toArray(),
-        ]);
-
-        $entry->debtor->forgetTotalCache();
+        $entry = $entryService->update($entry, $data, $request->user());
 
         return response()->json(['entry' => $entry]);
     }
 
-    public function void(Entry $entry)
+    public function void(Request $request, Entry $entry, EntryService $entryService): JsonResponse
     {
         Gate::authorize('update', $entry);
 
-        $oldValue = $entry->toArray();
-
-        $entry->update([
-            'is_voided' => true,
-            'voided_by_user_id' => auth()->id(),
-            'voided_at' => now(),
-        ]);
-
-        ActivityLog::create([
-            'warung_id' => $entry->warung_id,
-            'entry_id' => $entry->id,
-            'user_id' => auth()->id(),
-            'action' => 'voided_entry',
-            'old_value' => $oldValue,
-            'new_value' => $entry->fresh()->toArray(),
-        ]);
-
-        $entry->debtor->forgetTotalCache();
+        $entryService->void($entry, $request->user());
 
         return response()->json(['success' => true]);
     }

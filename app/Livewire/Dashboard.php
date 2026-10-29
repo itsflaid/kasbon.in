@@ -2,10 +2,18 @@
 
 namespace App\Livewire;
 
+use App\Models\Debtor;
 use App\Models\Warung;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
+/**
+ * @property-read Collection<int, Debtor> $debtors
+ * @property-read int $total
+ * @property-read bool $hasIncompletePrice
+ */
 class Dashboard extends Component
 {
     public Warung $warung;
@@ -14,7 +22,7 @@ class Dashboard extends Component
 
     public function mount(): void
     {
-        $this->warung = Warung::findOrFail(session('active_warung_id'));
+        $this->warung = Warung::whereKey(session('active_warung_id'))->firstOrFail();
     }
 
     public string $filter = 'semua';
@@ -29,15 +37,19 @@ class Dashboard extends Component
         $this->showModal = true;
     }
 
+    #[On('close-modal')]
     public function closeModal(): void
     {
         $this->showModal = false;
     }
 
-    public function getDebtorsProperty()
+    /**
+     * @return Collection<int, Debtor>
+     */
+    public function getDebtorsProperty(): Collection
     {
         return $this->warung->debtors()
-            ->with(['entries' => fn ($q) => $q->active()->with('recordedBy')])
+            ->with(['entries' => fn ($q) => $q->where('is_voided', false)->with('recordedBy')])
             ->when($this->search, fn ($q) => $q->where('name', 'like', "%{$this->search}%"))
             ->get()
             ->filter(function ($debtor) {
@@ -56,19 +68,28 @@ class Dashboard extends Component
 
     public function getTotalProperty(): int
     {
-        return $this->warung->entries()->active()->sum('amount');
+        $debt = $this->warung->entries()
+            ->where('is_voided', false)
+            ->where('type', 'debt')
+            ->sum('amount');
+        $paid = $this->warung->entries()
+            ->where('is_voided', false)
+            ->where('type', 'payment')
+            ->sum('amount');
+
+        return (int) $debt - (int) $paid;
     }
 
     public function getHasIncompletePriceProperty(): bool
     {
         return $this->warung->entries()
-            ->debts()
-            ->active()
+            ->where('type', 'debt')
+            ->where('is_voided', false)
             ->whereNull('amount')
             ->exists();
     }
 
-    public function render()
+    public function render(): View
     {
         return view('livewire.dashboard', [
             'debtors' => $this->debtors,

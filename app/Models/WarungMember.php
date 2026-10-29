@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\WarungMemberFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,17 +24,27 @@ class WarungMember extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Warung, $this>
+     */
     public function warung(): BelongsTo
     {
         return $this->belongsTo(Warung::class);
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function scopeActive($query)
+    /**
+     * @param  Builder<WarungMember>  $query
+     * @return Builder<WarungMember>
+     */
+    public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
     }

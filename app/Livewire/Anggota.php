@@ -29,13 +29,19 @@ class Anggota extends Component
     public function toggleEditor(WarungMember $member): void
     {
         Gate::authorize('manageMembers', $this->warung);
+
+        abort_unless($member->warung_id === $this->warung->id, 404);
+
         $member->update(['can_edit_any_entry' => ! $member->can_edit_any_entry]);
     }
 
     public function kick(WarungMember $member): void
     {
         Gate::authorize('manageMembers', $this->warung);
+
+        abort_unless($member->warung_id === $this->warung->id, 404);
         abort_if($member->user_id === auth()->id(), 400);
+
         $member->update(['is_active' => false]);
     }
 

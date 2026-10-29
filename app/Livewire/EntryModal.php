@@ -5,6 +5,8 @@ namespace App\Livewire;
 use App\Models\Debtor;
 use App\Models\Warung;
 use App\Services\EntryService;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
 
 class EntryModal extends Component
@@ -15,7 +17,12 @@ class EntryModal extends Component
 
     public ?int $debtor_id = null;
 
-    public string $item_description = '';
+    /** @var array<int, array{id: int, item_description: string, amount: int|null}> */
+    public array $items = [
+        ['id' => 1, 'item_description' => '', 'amount' => null],
+    ];
+
+    public int $nextItemId = 2;
 
     public ?int $amount = null;
 
@@ -25,18 +32,49 @@ class EntryModal extends Component
 
     public bool $showConfirm = false;
 
+    /** @var array<string, mixed>|null */
     public ?array $pendingData = null;
 
     public string $warning = '';
 
-    public function mount(Warung $warung): void
+    public function mount(Warung $warung, ?int $debtorId = null, string $initialType = 'debt'): void
     {
         $this->warung = $warung;
+        $this->debtor_id = $debtorId;
+        $this->type = in_array($initialType, ['debt', 'payment'], true) ? $initialType : 'debt';
+        $this->useNewDebtor = $this->type === 'debt' && ! $this->warung->debtors()->exists();
     }
 
-    public function getDebtorsProperty()
+    /**
+     * @return Collection<int, Debtor>
+     */
+    public function getDebtorsProperty(): Collection
     {
         return $this->warung->debtors()->orderBy('name')->get();
+    }
+
+    public function getItemsTotalProperty(): int
+    {
+        return collect($this->items)->sum(fn (array $item): int => (int) ($item['amount'] ?? 0));
+    }
+
+    public function addItem(): void
+    {
+        $this->items[] = [
+            'id' => $this->nextItemId++,
+            'item_description' => '',
+            'amount' => null,
+        ];
+    }
+
+    public function removeItem(int $index): void
+    {
+        if (count($this->items) <= 1 || ! isset($this->items[$index])) {
+            return;
+        }
+
+        unset($this->items[$index]);
+        $this->items = array_values($this->items);
     }
 
     public function updatedType(): void
@@ -44,14 +82,40 @@ class EntryModal extends Component
         $this->resetValidation();
     }
 
+    /**
+     * @return array<string, string>
+     */
+    protected function messages(): array
+    {
+        return [
+            'debtor_id.required_if' => 'Pilih pelanggan atau isi nama baru.',
+            'debtor_id.exists' => 'Pelanggan tidak ditemukan.',
+            'newDebtorName.required_if' => 'Nama pelanggan baru wajib diisi.',
+            'items.required' => 'Tambahkan minimal satu barang.',
+            'items.min' => 'Tambahkan minimal satu barang.',
+            'items.*.item_description.required' => 'Nama barang wajib diisi.',
+            'items.*.item_description.min' => 'Nama barang minimal 1 karakter.',
+            'items.*.amount.integer' => 'Harga harus berupa angka bulat.',
+            'items.*.amount.min' => 'Harga minimal 1.',
+            'amount.required' => 'Jumlah bayar wajib diisi.',
+            'amount.integer' => 'Jumlah harus berupa angka bulat.',
+            'amount.min' => 'Jumlah minimal 1.',
+        ];
+    }
+
     public function submit(): void
     {
+        if ($this->type === 'debt') {
+            $this->normalizeItems();
+        }
+
         $this->validate($this->type === 'debt' ? [
-            'debtor_id' => 'required_without:useNewDebtor|exists:debtors,id',
-            'useNewDebtor' => 'required_without:debtor_id|boolean',
+            'debtor_id' => 'nullable|required_if:useNewDebtor,false|exists:debtors,id',
+            'useNewDebtor' => 'boolean',
             'newDebtorName' => 'required_if:useNewDebtor,true|string|min:1|max:255',
-            'item_description' => 'required|string|min:1|max:255',
-            'amount' => 'nullable|integer|min:1',
+            'items' => 'required|array|min:1',
+            'items.*.item_description' => 'required|string|min:1|max:255',
+            'items.*.amount' => 'nullable|integer|min:1',
         ] : [
             'debtor_id' => 'required|exists:debtors,id',
             'amount' => 'required|integer|min:1',
@@ -67,14 +131,25 @@ class EntryModal extends Component
             $debtorId = $debtor->id;
         }
 
-        $data = [
-            'debtor_id' => $debtorId,
-            'type' => $this->type,
-            'item_description' => $this->type === 'debt' ? $this->item_description : null,
-            'amount' => $this->amount,
-        ];
+        if ($this->type === 'debt') {
+            app(EntryService::class)->createMany(
+                $this->warung,
+                (int) $debtorId,
+                $this->items,
+                auth()->user(),
+            );
 
-        $result = app(EntryService::class)->create($this->warung, $data, auth()->user());
+            $this->close();
+
+            return;
+        }
+
+        $result = app(EntryService::class)->create($this->warung, [
+            'debtor_id' => $debtorId,
+            'type' => 'payment',
+            'item_description' => null,
+            'amount' => $this->amount,
+        ], auth()->user());
 
         if ($result['status'] === 'warning') {
             $this->warning = $result['message'];
@@ -102,8 +177,32 @@ class EntryModal extends Component
         $this->dispatch('close-modal');
     }
 
-    public function render()
+    public function render(): View
     {
         return view('livewire.entry-modal');
+    }
+
+    private function normalizeItems(): void
+    {
+        $items = collect($this->items)
+            ->filter(function (array $item): bool {
+                return trim((string) ($item['item_description'] ?? '')) !== ''
+                    || trim((string) ($item['amount'] ?? '')) !== '';
+            })
+            ->map(function (array $item): array {
+                $digits = preg_replace('/\D/', '', (string) ($item['amount'] ?? ''));
+
+                return [
+                    'id' => (int) ($item['id'] ?? 0),
+                    'item_description' => trim((string) ($item['item_description'] ?? '')),
+                    'amount' => $digits !== '' ? (int) $digits : null,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $this->items = $items !== [] ? $items : [
+            ['id' => 1, 'item_description' => '', 'amount' => null],
+        ];
     }
 }
