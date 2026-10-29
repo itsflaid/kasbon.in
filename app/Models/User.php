@@ -44,11 +44,17 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * @return HasMany<Warung, $this>
+     */
     public function ownedWarungs(): HasMany
     {
         return $this->hasMany(Warung::class, 'owner_id');
     }
 
+    /**
+     * @return HasMany<WarungMember, $this>
+     */
     public function warungMembers(): HasMany
     {
         return $this->hasMany(WarungMember::class);

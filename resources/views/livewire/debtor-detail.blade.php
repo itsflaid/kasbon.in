@@ -28,7 +28,7 @@
                     $isDebt = $entry->type === 'debt';
                     $hasAmount = $entry->amount !== null;
                 @endphp
-                <div class="flex gap-3 border-b border-rule py-3.5">
+                <div wire:key="entry-{{ $entry->id }}" class="flex gap-3 border-b border-rule py-3.5">
                     <span class="mt-1 h-[9px] w-[9px] shrink-0 rounded-full {{ $isDebt ? 'bg-amber' : 'bg-green' }}"></span>
                     <div class="flex-1 min-w-0">
                         <div class="text-sm font-semibold text-ink">
@@ -46,6 +46,14 @@
                         @else
                             <span class="inline-block rounded-full bg-amber-soft px-2.5 py-1 text-[11px] font-bold text-amber">isi harga</span>
                         @endif
+
+                        @can('update', $entry)
+                            <div class="mt-1">
+                                <button wire:click="editEntry({{ $entry->id }})" class="text-[11px] font-semibold text-primary">
+                                    {{ $hasAmount ? 'Edit' : 'Isi harga' }}
+                                </button>
+                            </div>
+                        @endcan
                     </div>
                 </div>
             @empty
@@ -58,9 +66,53 @@
         {{-- Action Bar --}}
         <div class="fixed bottom-0 left-0 right-0 z-40 border-t border-rule bg-surface px-5 py-3.5 pb-5">
             <div class="flex gap-2.5">
-                <a href="{{ route('dashboard') }}" wire:navigate class="flex-1 rounded-full border-[1.5px] border-primary py-3 text-center text-sm font-bold text-primary">Catat Utang</a>
-                <button class="flex-1 rounded-full bg-primary py-3 text-sm font-bold text-white">Bayar Utang</button>
+                <button wire:click="openEntryModal('debt')" class="flex-1 rounded-full border-[1.5px] border-primary py-3 text-center text-sm font-bold text-primary">Catat Utang</button>
+                <button wire:click="openEntryModal('payment')" class="flex-1 rounded-full bg-primary py-3 text-sm font-bold text-white">Bayar Utang</button>
             </div>
         </div>
+
+        @if($showEntryModal)
+            <livewire:entry-modal
+                :warung="$debtor->warung"
+                :debtor-id="$debtor->id"
+                :initial-type="$entryType"
+                :key="'entry-modal-'.$debtor->id.'-'.$entryType"
+            />
+        @endif
+
+        @if($showEditModal)
+            <div class="fixed inset-0 z-50 flex items-end justify-center">
+                <div class="absolute inset-0 bg-black/40" wire:click="closeEditModal"></div>
+
+                <div class="relative z-10 w-full max-w-lg rounded-t-2xl bg-surface p-6 pb-8">
+                    <div class="mb-5 flex items-center justify-between">
+                        <h2 class="text-base font-bold text-ink">{{ $editingType === 'debt' ? 'Edit Catatan Utang' : 'Edit Pembayaran' }}</h2>
+                        <button wire:click="closeEditModal" class="text-xl text-muted">&times;</button>
+                    </div>
+
+                    @if($editingType === 'debt')
+                        <div class="mb-3">
+                            <label class="mb-1 block text-xs font-semibold text-muted">Barang / Keterangan</label>
+                            <input type="text" wire:model="editItemDescription" class="w-full rounded-full border border-rule bg-surface px-4 py-2.5 text-sm text-ink placeholder-muted focus:border-primary focus:outline-none">
+                            @error('editItemDescription') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        </div>
+                    @endif
+
+                    <div class="mb-5">
+                        <label class="mb-1 block text-xs font-semibold text-muted">Jumlah</label>
+                        <x-currency-input model="editAmount" :value="$editAmount" />
+                        @error('editAmount') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+
+                    <button wire:click="saveEntry" class="w-full rounded-full bg-primary py-3.5 text-sm font-bold text-white">Simpan</button>
+
+                    <button
+                        wire:click="voidEntry({{ $editingEntryId }})"
+                        wire:confirm="Batalkan catatan ini? Catatan tidak dihapus, hanya ditandai batal."
+                        class="mt-3 w-full rounded-full border-[1.5px] border-red-400 py-3 text-sm font-bold text-red-500"
+                    >Batalkan Catatan</button>
+                </div>
+            </div>
+        @endif
     </div>
 </div>

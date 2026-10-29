@@ -18,7 +18,9 @@ class AuthController extends Controller
     {
         try {
             $googleUser = Socialite::driver('google')->user();
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            report($exception);
+
             return redirect()->route('home');
         }
 

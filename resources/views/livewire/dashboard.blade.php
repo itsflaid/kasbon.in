@@ -77,9 +77,15 @@
         {{-- FAB --}}
         <button
             wire:click="openModal"
-            class="fixed right-5 bottom-20 z-30 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-primary text-[26px] text-white shadow-lg"
+            aria-label="Catat utang baru"
+            class="fixed right-5 bottom-20 z-30 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-primary text-white shadow-lg"
             style="box-shadow: 0 8px 16px rgba(31,78,95,.35)"
-        >+</button>
+        >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <path d="M12 5v14"/>
+                <path d="M5 12h14"/>
+            </svg>
+        </button>
 
         {{-- Bottom Nav --}}
         <x-bottom-nav active="dashboard" />

@@ -25,26 +25,41 @@ class Warung extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
     }
 
+    /**
+     * @return HasMany<WarungMember, $this>
+     */
     public function members(): HasMany
     {
         return $this->hasMany(WarungMember::class);
     }
 
+    /**
+     * @return HasMany<Debtor, $this>
+     */
     public function debtors(): HasMany
     {
         return $this->hasMany(Debtor::class);
     }
 
+    /**
+     * @return HasMany<Entry, $this>
+     */
     public function entries(): HasMany
     {
         return $this->hasMany(Entry::class);
     }
 
+    /**
+     * @return HasMany<ActivityLog, $this>
+     */
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class);

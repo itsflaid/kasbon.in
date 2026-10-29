@@ -23,11 +23,17 @@ class Debtor extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<Warung, $this>
+     */
     public function warung(): BelongsTo
     {
         return $this->belongsTo(Warung::class);
     }
 
+    /**
+     * @return HasMany<Entry, $this>
+     */
     public function entries(): HasMany
     {
         return $this->hasMany(Entry::class);
@@ -48,7 +54,7 @@ class Debtor extends Model
             $debt = $this->entries()->debts()->active()->sum('amount');
             $paid = $this->entries()->payments()->active()->sum('amount');
 
-            return $debt - $paid;
+            return (int) $debt - (int) $paid;
         });
     }
 

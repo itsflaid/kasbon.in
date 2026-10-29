@@ -17,16 +17,25 @@ class ActivityLog extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Warung, $this>
+     */
     public function warung(): BelongsTo
     {
         return $this->belongsTo(Warung::class);
     }
 
+    /**
+     * @return BelongsTo<Entry, $this>
+     */
     public function entry(): BelongsTo
     {
         return $this->belongsTo(Entry::class);
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
