@@ -15,13 +15,26 @@ class EntryCreated implements ShouldBroadcast
 
     public function __construct(public Entry $entry) {}
 
+    /**
+     * @return array<int, PrivateChannel>
+     */
     public function broadcastOn(): array
     {
         return [new PrivateChannel('warung.'.$this->entry->warung_id)];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function broadcastWith(): array
     {
-        return ['entry' => $this->entry->toArray()];
+        return [
+            'entry_id' => $this->entry->id,
+            'warung_id' => $this->entry->warung_id,
+            'debtor_id' => $this->entry->debtor_id,
+            'type' => $this->entry->type,
+            'amount' => $this->entry->amount,
+            'action' => 'created',
+        ];
     }
 }

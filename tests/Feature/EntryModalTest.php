@@ -133,6 +133,36 @@ it('bisa catat utang dengan pelanggan baru saat warung belum punya debtor', func
     ]);
 });
 
+it('mengabaikan pilihan pelanggan lama saat memakai nama baru', function () {
+    $owner = User::factory()->create();
+    $warung = Warung::factory()->create(['owner_id' => $owner->id]);
+    WarungMember::factory()->create([
+        'warung_id' => $warung->id,
+        'user_id' => $owner->id,
+        'role' => 'owner',
+        'can_edit_any_entry' => true,
+    ]);
+    $debtor = Debtor::factory()->create(['warung_id' => $warung->id]);
+
+    Livewire::actingAs($owner)
+        ->test(EntryModal::class, ['warung' => $warung])
+        ->set('debtor_id', $debtor->id)
+        ->set('useNewDebtor', true)
+        ->set('newDebtorName', 'Pelanggan Baru')
+        ->set('items', [
+            ['item_description' => 'Teh', 'amount' => 3000],
+        ])
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('entries', [
+        'warung_id' => $warung->id,
+        'item_description' => 'Teh',
+        'amount' => 3000,
+    ]);
+    $this->assertDatabaseCount('debtors', 2);
+});
+
 it('menampilkan error saat pelanggan dan keterangan belum diisi', function () {
     $owner = User::factory()->create();
     $warung = Warung::factory()->create(['owner_id' => $owner->id]);

@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'google_id', 'avatar_url', 'password'])]
+#[Fillable(['name', 'email', 'google_id', 'avatar_url', 'email_verified_at', 'password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -58,5 +58,13 @@ class User extends Authenticatable
     public function warungMembers(): HasMany
     {
         return $this->hasMany(WarungMember::class);
+    }
+
+    /**
+     * @return HasMany<WarungMember, $this>
+     */
+    public function activeWarungMembers(): HasMany
+    {
+        return $this->warungMembers()->active();
     }
 }

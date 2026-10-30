@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreEntryRequest;
+use App\Http\Requests\UpdateEntryRequest;
 use App\Models\Entry;
 use App\Models\Warung;
 use App\Services\EntryService;
@@ -21,36 +22,22 @@ class EntryController extends Controller
                 'warning' => $result['message'],
                 'overpayment' => $result['overpayment'],
                 'data' => $result['data'],
-            ], 200);
+            ]);
         }
 
         return response()->json(['entry' => $result['entry']], 201);
     }
 
-    public function confirmStore(Warung $warung, Request $request, EntryService $entryService): JsonResponse
+    public function confirmStore(StoreEntryRequest $request, Warung $warung, EntryService $entryService): JsonResponse
     {
-        $data = $request->validate([
-            'debtor_id' => 'required|exists:debtors,id',
-            'type' => 'required|in:debt,payment',
-            'item_description' => 'nullable|string|required_if:type,debt',
-            'amount' => 'nullable|integer|min:1|required_if:type,payment',
-        ]);
-
-        $entry = $entryService->confirmCreate($warung, $data, $request->user());
+        $entry = $entryService->confirmCreate($warung, $request->validated(), $request->user());
 
         return response()->json(['entry' => $entry], 201);
     }
 
-    public function update(Request $request, Entry $entry, EntryService $entryService): JsonResponse
+    public function update(UpdateEntryRequest $request, Entry $entry, EntryService $entryService): JsonResponse
     {
-        Gate::authorize('update', $entry);
-
-        $data = $request->validate([
-            'amount' => ['required', 'integer', 'min:1'],
-            'item_description' => ['nullable', 'string'],
-        ]);
-
-        $entry = $entryService->update($entry, $data, $request->user());
+        $entry = $entryService->update($entry, $request->validated(), $request->user());
 
         return response()->json(['entry' => $entry]);
     }

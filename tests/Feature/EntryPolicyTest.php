@@ -97,3 +97,23 @@ it('forbids a user outside the warung from updating an entry', function () {
 
     expect(Gate::forUser(User::factory()->create())->allows('update', $entry))->toBeFalse();
 });
+
+it('allows active members to create entries', function () {
+    ['owner' => $owner, 'warung' => $warung] = createEntryPolicyTestContext();
+
+    expect(Gate::forUser($owner)->allows('create', [Entry::class, $warung]))->toBeTrue();
+});
+
+it('forbids outsiders from creating entries', function () {
+    ['warung' => $warung] = createEntryPolicyTestContext();
+
+    expect(Gate::forUser(User::factory()->create())->allows('create', [Entry::class, $warung]))->toBeFalse();
+});
+
+it('forbids updating a voided entry', function () {
+    ['owner' => $owner, 'entry' => $entry] = createEntryPolicyTestContext();
+
+    $entry->forceFill(['is_voided' => true])->save();
+
+    expect(Gate::forUser($owner)->allows('update', $entry))->toBeFalse();
+});

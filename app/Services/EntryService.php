@@ -3,20 +3,21 @@
 namespace App\Services;
 
 use App\Events\EntryCreated;
+use App\Events\EntryUpdated;
 use App\Models\ActivityLog;
 use App\Models\Debtor;
 use App\Models\Entry;
 use App\Models\User;
 use App\Models\Warung;
+use App\Models\WarungMember;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class EntryService
 {
     /**
-     * Coba buat entry baru. Kalau type=payment dan amount melebihi sisa utang,
-     * TIDAK jadi disimpan — return status 'warning' supaya caller bisa minta konfirmasi dulu.
-     *
      * @param  array<string, mixed>  $data
      * @return array{status: 'warning', message: string, overpayment: int, data: array<string, mixed>}|array{status: 'created', entry: Entry}
      */
@@ -24,43 +25,43 @@ class EntryService
     {
         $this->ensureMember($warung, $user);
 
-        $debtor = $this->debtorForWarung($warung, (int) $data['debtor_id']);
+        return DB::transaction(function () use ($warung, $data, $user): array {
+            $debtor = $this->resolveDebtor(
+                $warung,
+                isset($data['debtor_id']) ? (int) $data['debtor_id'] : null,
+                isset($data['new_debtor_name']) ? (string) $data['new_debtor_name'] : null,
+                ($data['type'] ?? null) === 'payment',
+            );
 
-        $data['warung_id'] = $warung->id;
-        $data['recorded_by_user_id'] = $user->id;
+            if ($data['type'] === 'payment' && isset($data['amount']) && $data['amount'] > $debtor->total()) {
+                return [
+                    'status' => 'warning',
+                    'message' => 'Jumlah bayar melebihi sisa utang. Konfirmasi untuk tetap melanjutkan.',
+                    'overpayment' => (int) $data['amount'] - $debtor->total(),
+                    'data' => $data,
+                ];
+            }
 
-        if ($data['type'] === 'payment' && isset($data['amount']) && $data['amount'] > $debtor->total()) {
             return [
-                'status' => 'warning',
-                'message' => 'Jumlah bayar melebihi sisa utang. Konfirmasi untuk tetap melanjutkan.',
-                'overpayment' => $data['amount'] - $debtor->total(),
-                'data' => $data,
+                'status' => 'created',
+                'entry' => $this->persist($warung, $debtor, $data, $user),
             ];
-        }
-
-        return [
-            'status' => 'created',
-            'entry' => $this->persist($warung, $debtor, $data, $user),
-        ];
+        });
     }
 
     /**
-     * Simpan beberapa barang sekaligus sebagai entry utang terpisah.
-     *
      * @param  array<int, array{item_description: string, amount: int|null}>  $items
      * @return Collection<int, Entry>
      */
-    public function createMany(Warung $warung, int $debtorId, array $items, User $user): Collection
+    public function createMany(Warung $warung, ?int $debtorId, array $items, User $user, ?string $newDebtorName = null): Collection
     {
         $this->ensureMember($warung, $user);
 
-        $debtor = $this->debtorForWarung($warung, $debtorId);
+        return DB::transaction(function () use ($warung, $debtorId, $items, $user, $newDebtorName): Collection {
+            $debtor = $this->resolveDebtor($warung, $debtorId, $newDebtorName);
 
-        return DB::transaction(function () use ($warung, $debtor, $items, $user): Collection {
             $entries = collect($items)->map(function (array $item) use ($warung, $debtor, $user): Entry {
                 return $this->persist($warung, $debtor, [
-                    'warung_id' => $warung->id,
-                    'recorded_by_user_id' => $user->id,
                     'debtor_id' => $debtor->id,
                     'type' => 'debt',
                     'item_description' => $item['item_description'],
@@ -73,21 +74,17 @@ class EntryService
     }
 
     /**
-     * Simpan entry setelah user konfirmasi lewat peringatan overpayment.
-     * Tidak ngecek ulang overpayment — sudah dikonfirmasi user.
-     *
      * @param  array<string, mixed>  $data
      */
     public function confirmCreate(Warung $warung, array $data, User $user): Entry
     {
         $this->ensureMember($warung, $user);
 
-        $debtor = $this->debtorForWarung($warung, (int) $data['debtor_id']);
+        return DB::transaction(function () use ($warung, $data, $user): Entry {
+            $debtor = $this->resolveDebtor($warung, (int) $data['debtor_id'], null, true);
 
-        $data['warung_id'] = $warung->id;
-        $data['recorded_by_user_id'] = $user->id;
-
-        return $this->persist($warung, $debtor, $data, $user);
+            return $this->persist($warung, $debtor, $data, $user);
+        });
     }
 
     /**
@@ -95,46 +92,76 @@ class EntryService
      */
     public function update(Entry $entry, array $data, User $user): Entry
     {
-        $oldValue = $entry->toArray();
+        return DB::transaction(function () use ($entry, $data, $user): Entry {
+            $locked = Entry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
-        $entry->update($data + ['edited_by_user_id' => $user->id]);
+            $this->ensureMemberForWarungId($locked->warung_id, $user);
 
-        ActivityLog::create([
-            'warung_id' => $entry->warung_id,
-            'entry_id' => $entry->id,
-            'user_id' => $user->id,
-            'action' => 'updated_entry',
-            'old_value' => $oldValue,
-            'new_value' => $entry->fresh()->toArray(),
-        ]);
+            if ($locked->is_voided) {
+                throw ValidationException::withMessages([
+                    'entry' => 'Entry yang sudah dibatalkan tidak dapat diubah.',
+                ]);
+            }
 
-        $entry->debtor?->forgetTotalCache();
+            $oldValue = $locked->toArray();
 
-        return $entry;
+            $locked->forceFill([
+                'amount' => array_key_exists('amount', $data) ? $data['amount'] : $locked->amount,
+                'item_description' => array_key_exists('item_description', $data)
+                    ? ($data['item_description'] ?: null)
+                    : $locked->item_description,
+                'edited_by_user_id' => $user->id,
+            ])->save();
+
+            ActivityLog::create([
+                'warung_id' => $locked->warung_id,
+                'entry_id' => $locked->id,
+                'user_id' => $user->id,
+                'action' => 'updated_entry',
+                'old_value' => $oldValue,
+                'new_value' => $locked->fresh()->toArray(),
+            ]);
+
+            DB::afterCommit(fn () => event(new EntryUpdated($locked, 'updated')));
+
+            return $locked;
+        });
     }
 
     public function void(Entry $entry, User $user): Entry
     {
-        $oldValue = $entry->toArray();
+        return DB::transaction(function () use ($entry, $user): Entry {
+            $locked = Entry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
-        $entry->update([
-            'is_voided' => true,
-            'voided_by_user_id' => $user->id,
-            'voided_at' => now(),
-        ]);
+            $this->ensureMemberForWarungId($locked->warung_id, $user);
 
-        ActivityLog::create([
-            'warung_id' => $entry->warung_id,
-            'entry_id' => $entry->id,
-            'user_id' => $user->id,
-            'action' => 'voided_entry',
-            'old_value' => $oldValue,
-            'new_value' => $entry->fresh()->toArray(),
-        ]);
+            if ($locked->is_voided) {
+                throw ValidationException::withMessages([
+                    'entry' => 'Entry sudah dibatalkan.',
+                ]);
+            }
 
-        $entry->debtor?->forgetTotalCache();
+            $oldValue = $locked->toArray();
 
-        return $entry;
+            $locked->forceFill([
+                'is_voided' => true,
+                'voided_by_user_id' => $user->id,
+                'voided_at' => now(),
+            ])->save();
+
+            ActivityLog::create([
+                'warung_id' => $locked->warung_id,
+                'entry_id' => $locked->id,
+                'user_id' => $user->id,
+                'action' => 'voided_entry',
+                'old_value' => $oldValue,
+                'new_value' => $locked->fresh()->toArray(),
+            ]);
+
+            DB::afterCommit(fn () => event(new EntryUpdated($locked, 'voided')));
+
+            return $locked;
+        });
     }
 
     /**
@@ -142,9 +169,17 @@ class EntryService
      */
     private function persist(Warung $warung, Debtor $debtor, array $data, User $user): Entry
     {
-        $entry = Entry::create($data);
+        $entry = new Entry([
+            'debtor_id' => $debtor->id,
+            'type' => $data['type'],
+            'item_description' => $data['item_description'] ?? null,
+            'amount' => $data['amount'] ?? null,
+        ]);
 
-        event(new EntryCreated($entry));
+        $entry->warung()->associate($warung);
+        $entry->recordedBy()->associate($user);
+        $entry->is_voided = false;
+        $entry->save();
 
         ActivityLog::create([
             'warung_id' => $warung->id,
@@ -154,20 +189,63 @@ class EntryService
             'new_value' => $entry->toArray(),
         ]);
 
-        $debtor->forgetTotalCache();
+        DB::afterCommit(fn () => event(new EntryCreated($entry)));
 
         return $entry;
     }
 
-    private function debtorForWarung(Warung $warung, int $debtorId): Debtor
+    private function resolveDebtor(Warung $warung, ?int $debtorId, ?string $newDebtorName, bool $lock = false): Debtor
     {
-        return $warung->debtors()->findOrFail($debtorId);
+        if ($debtorId !== null) {
+            return $this->debtorForWarung($warung, $debtorId, $lock);
+        }
+
+        $name = trim((string) $newDebtorName);
+
+        if ($name === '') {
+            throw ValidationException::withMessages([
+                'debtor_id' => 'Pilih pelanggan atau isi nama baru.',
+            ]);
+        }
+
+        $normalizedName = Debtor::normalizeName($name);
+
+        try {
+            return $warung->debtors()->firstOrCreate(
+                ['normalized_name' => $normalizedName],
+                ['name' => $name],
+            );
+        } catch (UniqueConstraintViolationException) {
+            return $warung->debtors()
+                ->where('normalized_name', $normalizedName)
+                ->firstOrFail();
+        }
+    }
+
+    private function debtorForWarung(Warung $warung, int $debtorId, bool $lock = false): Debtor
+    {
+        $query = $warung->debtors();
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        return $query->findOrFail($debtorId);
     }
 
     private function ensureMember(Warung $warung, User $user): void
     {
+        $this->ensureMemberForWarungId($warung->id, $user);
+    }
+
+    private function ensureMemberForWarungId(int $warungId, User $user): void
+    {
         abort_unless(
-            $warung->members()->where('user_id', $user->id)->where('is_active', true)->exists(),
+            WarungMember::query()
+                ->where('warung_id', $warungId)
+                ->where('user_id', $user->id)
+                ->where('is_active', true)
+                ->exists(),
             403,
         );
     }

@@ -2,14 +2,26 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\EnsuresWarungMembership;
 use App\Models\Entry;
+use App\Models\User;
 use App\Models\Warung;
+use App\Models\WarungMember;
+use Carbon\CarbonImmutable;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithPagination;
 
+/**
+ * @property-read Warung $warung
+ * @property-read Collection<int, User> $users
+ */
 class RiwayatGlobal extends Component
 {
+    use EnsuresWarungMembership;
     use WithPagination;
 
     public string $dateFrom = '';
@@ -18,19 +30,33 @@ class RiwayatGlobal extends Component
 
     public ?int $userId = null;
 
-    #[On('echo-private:warung.{activeWarungId},App\\Events\\EntryCreated')]
-    public function onEntryCreated(): void {}
+    #[Locked]
+    public int $activeWarungId;
 
-    public function getActiveWarungIdProperty(): int
+    public function mount(): void
     {
-        return session('active_warung_id');
+        $this->activeWarungId = (int) session('active_warung_id');
     }
 
-    public function getUsersProperty()
+    #[On('echo-private:warung.{activeWarungId},EntryCreated')]
+    #[On('echo-private:warung.{activeWarungId},EntryUpdated')]
+    public function onEntryChanged(): void {}
+
+    public function getWarungProperty(): Warung
     {
-        return Warung::find($this->activeWarungId)
-            ->members()->active()->with('user')->get()
-            ->pluck('user');
+        return Warung::query()->whereKey($this->activeWarungId)->firstOrFail();
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    public function getUsersProperty(): Collection
+    {
+        $members = $this->warung->members()->active()->with('user')->get();
+
+        return new Collection(
+            $members->map(fn (WarungMember $member): User => $member->user)->all(),
+        );
     }
 
     public function updatedUserId(): void
@@ -48,19 +74,32 @@ class RiwayatGlobal extends Component
         $this->resetPage();
     }
 
-    public function render()
+    public function render(): View
     {
-        $warungId = $this->activeWarungId;
+        $timezone = config('app.timezone');
 
-        $entries = Entry::where('warung_id', $warungId)
+        $entries = Entry::where('warung_id', $this->activeWarungId)
             ->active()
             ->with('debtor', 'recordedBy')
-            ->when($this->userId, fn ($q) => $q->where('recorded_by_user_id', $this->userId))
-            ->when($this->dateFrom, fn ($q) => $q->whereDate('created_at', '>=', $this->dateFrom))
-            ->when($this->dateTo, fn ($q) => $q->whereDate('created_at', '<=', $this->dateTo))
+            ->when($this->userId, fn ($query) => $query->where('recorded_by_user_id', $this->userId))
+            ->when($this->dateFrom, fn ($query) => $query->where(
+                'created_at',
+                '>=',
+                CarbonImmutable::parse($this->dateFrom, $timezone)->startOfDay()->utc(),
+            ))
+            ->when($this->dateTo, fn ($query) => $query->where(
+                'created_at',
+                '<=',
+                CarbonImmutable::parse($this->dateTo, $timezone)->endOfDay()->utc(),
+            ))
             ->latest()
             ->paginate(20);
 
         return view('livewire.riwayat-global', ['entries' => $entries]);
+    }
+
+    protected function membershipWarungId(): int
+    {
+        return $this->activeWarungId;
     }
 }

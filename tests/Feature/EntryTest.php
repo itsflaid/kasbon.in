@@ -175,7 +175,8 @@ it('rejects creating an entry with a debtor from another warung', function () {
             'item_description' => 'Mie Ayam',
             'amount' => 15000,
         ])
-        ->assertNotFound();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('debtor_id');
 
     $this->assertDatabaseCount('entries', 0);
 });
@@ -309,7 +310,8 @@ it('rejects confirming an entry with a debtor from another warung', function () 
             'item_description' => 'Mie Ayam',
             'amount' => 15000,
         ])
-        ->assertNotFound();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('debtor_id');
 
     $this->assertDatabaseCount('entries', 0);
 });
@@ -339,6 +341,25 @@ it('rejects a payment without an amount', function () {
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('amount');
+});
+
+it('rejects non-positive amounts', function () {
+    ['owner' => $owner, 'warung' => $warung] = createWarungWithOwner();
+    $debtor = Debtor::factory()->create(['warung_id' => $warung->id]);
+
+    foreach ([0, -1000] as $amount) {
+        $this->actingAs($owner)
+            ->postJson(route('entries.store', $warung), [
+                'debtor_id' => $debtor->id,
+                'type' => 'debt',
+                'item_description' => 'Mie Ayam',
+                'amount' => $amount,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('amount');
+    }
+
+    $this->assertDatabaseCount('entries', 0);
 });
 
 it('rejects an update without an amount', function () {

@@ -52,7 +52,9 @@ it('protects every application page from guests', function () {
     }
 });
 
-it('redirects the home and login entry points', function () {
+it('redirects home and renders the login entry point', function () {
     $this->get(route('home'))->assertRedirect(route('dashboard'));
-    $this->get(route('login'))->assertRedirect(route('google.redirect'));
+    $this->get(route('login'))
+        ->assertSuccessful()
+        ->assertSee('Masuk dengan Google');
 });

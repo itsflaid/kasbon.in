@@ -5,6 +5,9 @@ namespace App\Livewire;
 use App\Models\Warung;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -27,7 +30,7 @@ class PilihWarung extends Component
     {
         $user = auth()->user();
 
-        return Warung::whereHas('members', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true))
+        return Warung::whereHas('members', fn ($query) => $query->where('user_id', $user->id)->where('is_active', true))
             ->withCount('members')
             ->get();
     }
@@ -36,19 +39,39 @@ class PilihWarung extends Component
     {
         $this->newWarungName = trim($this->newWarungName);
 
-        $this->validate(['newWarungName' => 'required|string|min:2|max:255']);
+        $this->validate(['newWarungName' => ['required', 'string', 'min:2', 'max:255']]);
 
-        $warung = Warung::create([
-            'name' => $this->newWarungName,
-            'owner_id' => auth()->id(),
-        ]);
+        if (! $this->allow('warung-create', 5)) {
+            return;
+        }
 
-        $warung->members()->create([
-            'user_id' => auth()->id(),
-            'role' => 'owner',
-            'can_edit_any_entry' => true,
-            'is_active' => true,
-        ]);
+        $userId = auth()->id();
+
+        $warung = DB::transaction(function () use ($userId): Warung {
+            $attempts = 0;
+
+            do {
+                try {
+                    $warung = Warung::create([
+                        'name' => $this->newWarungName,
+                        'owner_id' => $userId,
+                    ]);
+
+                    $warung->members()->create([
+                        'user_id' => $userId,
+                        'role' => 'owner',
+                        'can_edit_any_entry' => true,
+                        'is_active' => true,
+                    ]);
+
+                    return $warung;
+                } catch (UniqueConstraintViolationException $exception) {
+                    if (++$attempts >= 3) {
+                        throw $exception;
+                    }
+                }
+            } while (true);
+        });
 
         session(['active_warung_id' => $warung->id]);
         $this->redirectRoute('dashboard');
@@ -58,7 +81,11 @@ class PilihWarung extends Component
     {
         $this->joinCode = strtoupper(trim($this->joinCode));
 
-        $this->validate(['joinCode' => 'required|string|size:8']);
+        $this->validate(['joinCode' => ['required', 'string', 'size:8']]);
+
+        if (! $this->allow('warung-join', 10)) {
+            return;
+        }
 
         $warung = Warung::where('invite_code', $this->joinCode)->first();
 
@@ -74,12 +101,18 @@ class PilihWarung extends Component
             return;
         }
 
-        $warung->members()->create([
-            'user_id' => auth()->id(),
-            'role' => 'staff',
-            'can_edit_any_entry' => false,
-            'is_active' => true,
-        ]);
+        try {
+            $warung->members()->create([
+                'user_id' => auth()->id(),
+                'role' => 'staff',
+                'can_edit_any_entry' => false,
+                'is_active' => true,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            $this->addError('joinCode', 'Sudah ikut warung ini.');
+
+            return;
+        }
 
         session(['active_warung_id' => $warung->id]);
         $this->redirectRoute('dashboard');
@@ -88,7 +121,7 @@ class PilihWarung extends Component
     public function selectWarung(int $warungId): void
     {
         $isMember = Warung::whereKey($warungId)
-            ->whereHas('members', fn ($q) => $q->where('user_id', auth()->id())->where('is_active', true))
+            ->whereHas('members', fn ($query) => $query->where('user_id', auth()->id())->where('is_active', true))
             ->exists();
 
         abort_unless($isMember, 403);
@@ -100,5 +133,23 @@ class PilihWarung extends Component
     public function render(): View
     {
         return view('livewire.pilih-warung', ['warungs' => $this->warungs]);
+    }
+
+    private function allow(string $action, int $maxAttempts): bool
+    {
+        $key = $action.':'.auth()->id();
+
+        if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
+            $this->addError(
+                $action === 'warung-create' ? 'newWarungName' : 'joinCode',
+                'Terlalu banyak percobaan. Coba lagi dalam '.RateLimiter::availableIn($key).' detik.',
+            );
+
+            return false;
+        }
+
+        RateLimiter::hit($key, 3600);
+
+        return true;
     }
 }

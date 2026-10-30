@@ -2,22 +2,29 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\EnsuresWarungMembership;
 use App\Models\Debtor;
+use App\Models\Entry;
 use App\Models\Warung;
 use App\Services\EntryService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Validation\Rule;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 class EntryModal extends Component
 {
+    use EnsuresWarungMembership;
+
+    #[Locked]
     public Warung $warung;
 
     public string $type = 'debt';
 
     public ?int $debtor_id = null;
 
-    /** @var array<int, array{id: int, item_description: string, amount: int|null}> */
+    /** @var array<int, array{id?: int, item_description?: string, amount?: int|string|null}> */
     public array $items = [
         ['id' => 1, 'item_description' => '', 'amount' => null],
     ];
@@ -33,6 +40,7 @@ class EntryModal extends Component
     public bool $showConfirm = false;
 
     /** @var array<string, mixed>|null */
+    #[Locked]
     public ?array $pendingData = null;
 
     public string $warning = '';
@@ -79,6 +87,11 @@ class EntryModal extends Component
 
     public function updatedType(): void
     {
+        if ($this->type === 'payment') {
+            $this->useNewDebtor = false;
+            $this->newDebtorName = '';
+        }
+
         $this->resetValidation();
     }
 
@@ -105,38 +118,42 @@ class EntryModal extends Component
 
     public function submit(): void
     {
+        $items = [];
+
         if ($this->type === 'debt') {
-            $this->normalizeItems();
+            if ($this->useNewDebtor) {
+                $this->debtor_id = null;
+            }
+
+            $items = $this->normalizeItems();
+            $this->items = $items;
         }
+
+        $debtorExists = Rule::exists('debtors', 'id')
+            ->where(fn ($query) => $query->where('warung_id', $this->warung->id));
 
         $this->validate($this->type === 'debt' ? [
-            'debtor_id' => 'nullable|required_if:useNewDebtor,false|exists:debtors,id',
-            'useNewDebtor' => 'boolean',
-            'newDebtorName' => 'required_if:useNewDebtor,true|string|min:1|max:255',
-            'items' => 'required|array|min:1',
-            'items.*.item_description' => 'required|string|min:1|max:255',
-            'items.*.amount' => 'nullable|integer|min:1',
+            'debtor_id' => ['nullable', 'required_if:useNewDebtor,false', $debtorExists],
+            'useNewDebtor' => ['boolean'],
+            'newDebtorName' => ['required_if:useNewDebtor,true', 'string', 'min:1', 'max:'.Entry::MAX_DESCRIPTION],
+            'items' => ['required', 'array', 'min:1', 'max:'.Entry::MAX_ITEMS_PER_SUBMIT],
+            'items.*.item_description' => ['required', 'string', 'min:1', 'max:'.Entry::MAX_DESCRIPTION],
+            'items.*.amount' => ['nullable', 'integer', 'min:1', 'max:'.Entry::MAX_AMOUNT],
         ] : [
-            'debtor_id' => 'required|exists:debtors,id',
-            'amount' => 'required|integer|min:1',
+            'debtor_id' => ['required', $debtorExists],
+            'amount' => ['required', 'integer', 'min:1', 'max:'.Entry::MAX_AMOUNT],
         ]);
 
-        $debtorId = $this->debtor_id;
-
-        if ($this->useNewDebtor && $this->newDebtorName !== '') {
-            $debtor = Debtor::firstOrCreate(
-                ['warung_id' => $this->warung->id, 'normalized_name' => strtolower(trim($this->newDebtorName))],
-                ['name' => $this->newDebtorName]
-            );
-            $debtorId = $debtor->id;
-        }
+        $debtorId = $this->useNewDebtor ? null : $this->debtor_id;
+        $newDebtorName = $this->useNewDebtor ? $this->newDebtorName : null;
 
         if ($this->type === 'debt') {
             app(EntryService::class)->createMany(
                 $this->warung,
-                (int) $debtorId,
-                $this->items,
+                $debtorId,
+                $items,
                 auth()->user(),
+                $newDebtorName,
             );
 
             $this->close();
@@ -182,7 +199,15 @@ class EntryModal extends Component
         return view('livewire.entry-modal');
     }
 
-    private function normalizeItems(): void
+    protected function membershipWarungId(): int
+    {
+        return $this->warung->id;
+    }
+
+    /**
+     * @return array<int, array{id: int, item_description: string, amount: int|null}>
+     */
+    private function normalizeItems(): array
     {
         $items = collect($this->items)
             ->filter(function (array $item): bool {
@@ -191,6 +216,7 @@ class EntryModal extends Component
             })
             ->map(function (array $item): array {
                 $digits = preg_replace('/\D/', '', (string) ($item['amount'] ?? ''));
+                $digits = $digits !== '' ? substr($digits, 0, strlen((string) Entry::MAX_AMOUNT)) : '';
 
                 return [
                     'id' => (int) ($item['id'] ?? 0),
@@ -201,7 +227,7 @@ class EntryModal extends Component
             ->values()
             ->all();
 
-        $this->items = $items !== [] ? $items : [
+        return $items !== [] ? $items : [
             ['id' => 1, 'item_description' => '', 'amount' => null],
         ];
     }

@@ -13,17 +13,17 @@ class Entry extends Model
     /** @use HasFactory<EntryFactory> */
     use HasFactory;
 
+    public const int MAX_AMOUNT = 1_000_000_000;
+
+    public const int MAX_DESCRIPTION = 255;
+
+    public const int MAX_ITEMS_PER_SUBMIT = 50;
+
     protected $fillable = [
-        'warung_id',
         'debtor_id',
         'type',
         'item_description',
         'amount',
-        'recorded_by_user_id',
-        'edited_by_user_id',
-        'is_voided',
-        'voided_by_user_id',
-        'voided_at',
     ];
 
     protected function casts(): array

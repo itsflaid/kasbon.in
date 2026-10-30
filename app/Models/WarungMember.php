@@ -8,6 +8,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property-read Warung $warung
+ * @property-read User $user
+ */
 class WarungMember extends Model
 {
     /** @use HasFactory<WarungMemberFactory> */

@@ -44,7 +44,7 @@
                             @else
                                 Bayar ·
                             @endif
-                            Dicatat {{ $entry->recordedBy?->name }} · {{ $entry->created_at->format('d M, H:i') }}
+                            Dicatat {{ $entry->recordedBy?->name }} · {{ $entry->created_at->timezone(config('app.timezone'))->format('d M, H:i') }}
                         </div>
                     </div>
                     <div class="shrink-0 text-right">

@@ -49,13 +49,13 @@ it('does not show warungs the user has not joined', function () {
         ->assertDontSee('Warung Orang Lain');
 });
 
-it('logs the user out and redirects home', function () {
+it('logs the user out and redirects to login', function () {
     $user = User::factory()->create();
 
     Livewire::actingAs($user)
         ->test(Profil::class)
         ->call('logout')
-        ->assertRedirect(route('home'));
+        ->assertRedirect(route('login'));
 
     $this->assertGuest();
 });

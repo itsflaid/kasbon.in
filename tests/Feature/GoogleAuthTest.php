@@ -62,7 +62,7 @@ it('updates existing user on subsequent login', function () {
     $this->assertDatabaseCount('users', 1);
 });
 
-it('redirects home on socialite failure', function () {
+it('redirects to login with an error on socialite failure', function () {
     Socialite::shouldReceive('driver')
         ->once()
         ->with('google')
@@ -70,7 +70,50 @@ it('redirects home on socialite failure', function () {
 
     $response = $this->get('/auth/google/callback');
 
-    $response->assertRedirect(route('home'));
+    $response->assertRedirect(route('login'));
+    $response->assertSessionHasErrors('google');
+});
+
+it('links an existing email account on first google login', function () {
+    $user = User::factory()->create([
+        'google_id' => null,
+        'name' => 'Budi Lama',
+        'email' => 'budi@gmail.com',
+    ]);
+
+    Socialite::fake('google', SocialiteUser::fake([
+        'id' => 'google-12345',
+        'name' => 'Budi Santoso',
+        'email' => 'budi@gmail.com',
+        'avatar' => 'https://example.com/avatar.jpg',
+    ]));
+
+    $this->get('/auth/google/callback')->assertRedirect(route('dashboard'));
+
+    expect($user->fresh())
+        ->google_id->toBe('google-12345')
+        ->name->toBe('Budi Santoso');
+    $this->assertAuthenticatedAs($user);
+});
+
+it('rejects linking an email already linked to another google account', function () {
+    User::factory()->create([
+        'google_id' => 'other-google-id',
+        'email' => 'budi@gmail.com',
+    ]);
+
+    Socialite::fake('google', SocialiteUser::fake([
+        'id' => 'google-12345',
+        'name' => 'Budi Santoso',
+        'email' => 'budi@gmail.com',
+        'avatar' => 'https://example.com/avatar.jpg',
+    ]));
+
+    $this->get('/auth/google/callback')
+        ->assertRedirect(route('login'))
+        ->assertSessionHasErrors('google');
+
+    $this->assertGuest();
 });
 
 it('protects dashboard with auth middleware', function () {

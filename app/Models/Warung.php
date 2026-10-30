@@ -20,9 +20,18 @@ class Warung extends Model
     {
         static::creating(function (Warung $warung) {
             if (empty($warung->invite_code)) {
-                $warung->invite_code = strtoupper(Str::random(8));
+                $warung->invite_code = self::generateUniqueInviteCode();
             }
         });
+    }
+
+    public static function generateUniqueInviteCode(): string
+    {
+        do {
+            $code = strtoupper(Str::random(8));
+        } while (self::query()->where('invite_code', $code)->exists());
+
+        return $code;
     }
 
     /**

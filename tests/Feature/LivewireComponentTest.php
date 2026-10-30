@@ -134,6 +134,27 @@ it('dashboard filters debtors by search', function () {
         ->assertDontSee('Andi');
 });
 
+it('dashboard treats search wildcards literally', function () {
+    $owner = User::factory()->create();
+    $warung = Warung::factory()->create(['owner_id' => $owner->id]);
+    WarungMember::factory()->create([
+        'warung_id' => $warung->id,
+        'user_id' => $owner->id,
+        'role' => 'owner',
+        'can_edit_any_entry' => true,
+    ]);
+    session(['active_warung_id' => $warung->id]);
+
+    Debtor::factory()->create(['warung_id' => $warung->id, 'name' => 'Budi']);
+    Debtor::factory()->create(['warung_id' => $warung->id, 'name' => 'B%d']);
+
+    Livewire::actingAs($owner)
+        ->test(Dashboard::class, ['warung' => $warung])
+        ->set('search', '%')
+        ->assertSee('B%d')
+        ->assertDontSee('Budi');
+});
+
 it('dashboard filters debtors by payment status', function () {
     $owner = User::factory()->create();
     $warung = Warung::factory()->create(['owner_id' => $owner->id]);

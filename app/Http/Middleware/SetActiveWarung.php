@@ -26,7 +26,9 @@ class SetActiveWarung
 
         if ($activeWarungId) {
             $isMember = Warung::where('id', $activeWarungId)
-                ->whereHas('members', fn ($q) => $q->where('user_id', $user->id)->active())
+                ->whereHas('members', fn ($q) => $q
+                    ->where('user_id', $user->id)
+                    ->where('is_active', true))
                 ->exists();
 
             if ($isMember) {
@@ -36,14 +38,18 @@ class SetActiveWarung
             session()->forget('active_warung_id');
         }
 
-        $warungCount = Warung::whereHas('members', fn ($q) => $q->where('user_id', $user->id)->active())->count();
+        $warungCount = Warung::whereHas('members', fn ($q) => $q
+            ->where('user_id', $user->id)
+            ->where('is_active', true))->count();
 
         if ($warungCount === 0) {
             return redirect()->route('pilih-warung');
         }
 
         if ($warungCount === 1) {
-            $warung = Warung::whereHas('members', fn ($q) => $q->where('user_id', $user->id)->active())->first();
+            $warung = Warung::whereHas('members', fn ($q) => $q
+                ->where('user_id', $user->id)
+                ->where('is_active', true))->first();
             session(['active_warung_id' => $warung->id]);
 
             return $next($request);

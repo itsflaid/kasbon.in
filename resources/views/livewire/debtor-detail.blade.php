@@ -8,14 +8,14 @@
 
             <div class="mt-1">
                 <h1 class="text-base font-bold text-ink">{{ $debtor->name }}{{ $debtor->note ? " ({$debtor->note})" : '' }}</h1>
-                <p class="mt-0.5 text-xs text-muted">{{ $entryCount }} catatan · sejak {{ $firstEntryAt?->format('d M Y') ?? '—' }}</p>
+                <p class="mt-0.5 text-xs text-muted">{{ $entryCount }} catatan · sejak {{ $firstEntryAt?->timezone(config('app.timezone'))->format('d M Y') ?? '—' }}</p>
             </div>
 
             <div class="relative mt-2 inline-block">
                 @if($debtor->hasIncompletePrice())
                     <span class="font-display text-[28px] font-bold text-muted">—</span>
                 @else
-                    <span class="font-display text-[28px] font-bold tracking-tight text-ink tabular-nums">Rp {{ number_format($total, 0, ',', '.') }}</span>
+                    <span class="font-display text-[28px] font-bold tracking-tight tabular-nums {{ $total < 0 ? 'text-red-600' : 'text-ink' }}">Rp {{ number_format($total, 0, ',', '.') }}</span>
                 @endif
                 <svg class="block -mt-1" width="130" height="10" viewBox="0 0 130 10"><path d="M2 6 C 26 2, 52 9, 78 4 S 112 2, 128 6" stroke="#1F4E5F" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
             </div>
@@ -38,7 +38,7 @@
                                 Bayar
                             @endif
                         </div>
-                        <div class="mt-0.5 text-[11.5px] text-muted">Dicatat {{ $entry->recordedBy?->name }} · {{ $entry->created_at->format('d M, H:i') }}</div>
+                        <div class="mt-0.5 text-[11.5px] text-muted">Dicatat {{ $entry->recordedBy?->name }} · {{ $entry->created_at->timezone(config('app.timezone'))->format('d M, H:i') }}</div>
                     </div>
                     <div class="shrink-0 text-right">
                         @if($hasAmount)
@@ -47,13 +47,13 @@
                             <span class="inline-block rounded-full bg-amber-soft px-2.5 py-1 text-[11px] font-bold text-amber">isi harga</span>
                         @endif
 
-                        @can('update', $entry)
+                        @if(in_array($entry->id, $editableEntryIds, true))
                             <div class="mt-1">
                                 <button wire:click="editEntry({{ $entry->id }})" class="text-[11px] font-semibold text-primary">
                                     {{ $hasAmount ? 'Edit' : 'Isi harga' }}
                                 </button>
                             </div>
-                        @endcan
+                        @endif
                     </div>
                 </div>
             @empty
