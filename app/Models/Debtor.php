@@ -3,12 +3,24 @@
 namespace App\Models;
 
 use Database\Factories\DebtorFactory;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
+/**
+ * @property int|null $debt_total
+ * @property int|null $payment_total
+ * @property int $has_incomplete_price
+ * @property int $incomplete_debt_count
+ * @property int $active_entries_count
+ * @property-read int $balance
+ * @property-read Entry|null $latestEntry
+ */
 class Debtor extends Model
 {
     /** @use HasFactory<DebtorFactory> */
@@ -19,8 +31,13 @@ class Debtor extends Model
     protected static function booted(): void
     {
         static::saving(function (Debtor $debtor) {
-            $debtor->normalized_name = strtolower(trim($debtor->name));
+            $debtor->normalized_name = self::normalizeName($debtor->name);
         });
+    }
+
+    public static function normalizeName(string $name): string
+    {
+        return Str::of($name)->squish()->lower()->toString();
     }
 
     /**
@@ -39,6 +56,15 @@ class Debtor extends Model
         return $this->hasMany(Entry::class);
     }
 
+    /**
+     * @return HasOne<Entry, $this>
+     */
+    public function latestEntry(): HasOne
+    {
+        return $this->hasOne(Entry::class)
+            ->ofMany(['id' => 'max'], fn (Builder $query) => $query->where('is_voided', false));
+    }
+
     public function hasIncompletePrice(): bool
     {
         return $this->entries()
@@ -50,16 +76,19 @@ class Debtor extends Model
 
     public function total(): int
     {
-        return Cache::remember("debtor.{$this->id}.total", 300, function () {
-            $debt = $this->entries()->debts()->active()->sum('amount');
-            $paid = $this->entries()->payments()->active()->sum('amount');
+        $debt = $this->entries()->debts()->active()->sum('amount');
+        $paid = $this->entries()->payments()->active()->sum('amount');
 
-            return (int) $debt - (int) $paid;
-        });
+        return (int) $debt - (int) $paid;
     }
 
-    public function forgetTotalCache(): void
+    /**
+     * @return Attribute<int, int>
+     */
+    protected function balance(): Attribute
     {
-        Cache::forget("debtor.{$this->id}.total");
+        return Attribute::get(
+            fn (): int => (int) ($this->debt_total ?? 0) - (int) ($this->payment_total ?? 0),
+        );
     }
 }

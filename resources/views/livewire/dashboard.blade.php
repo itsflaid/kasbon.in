@@ -7,7 +7,7 @@
                 @if($hasIncompletePrice)
                     <span class="font-display text-[28px] font-bold text-muted">—</span>
                 @else
-                    <span class="font-display text-[32px] font-bold tracking-tight text-ink tabular-nums">Rp {{ number_format($total, 0, ',', '.') }}</span>
+                    <span class="font-display text-[32px] font-bold tracking-tight tabular-nums {{ $total < 0 ? 'text-red-600' : 'text-ink' }}">Rp {{ number_format($total, 0, ',', '.') }}</span>
                 @endif
                 <svg class="block -mt-1" width="150" height="10" viewBox="0 0 150 10"><path d="M2 6 C 30 2, 60 9, 90 4 S 130 2, 148 6" stroke="#1F4E5F" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
             </div>
@@ -37,10 +37,10 @@
         <div class="flex-1 overflow-y-auto px-5 pb-24 pt-1">
             @forelse($debtors as $debtor)
                 @php
-                    $lastEntry = $debtor->entries->first();
-                    $incomplete = $debtor->hasIncompletePrice();
-                    $bal = $debtor->total();
-                    $isLunas = ! $incomplete && $bal <= 0 && $debtor->entries->isNotEmpty();
+                    $lastEntry = $debtor->latestEntry;
+                    $incomplete = (bool) $debtor->has_incomplete_price;
+                    $bal = $debtor->balance;
+                    $isLunas = ! $incomplete && $bal <= 0 && $debtor->active_entries_count > 0;
                 @endphp
                 <a
                     href="{{ route('debtor.detail', $debtor) }}"
@@ -58,17 +58,17 @@
                     </div>
                     <div class="text-right shrink-0 ml-2">
                         @if($incomplete)
-                            <span class="inline-block rounded-full bg-amber-soft px-2.5 py-1 text-[11px] font-semibold text-amber">{{ $debtor->entries->where('type','debt')->where('amount', null)->count() }} harga belum diisi</span>
+                            <span class="inline-block rounded-full bg-amber-soft px-2.5 py-1 text-[11px] font-semibold text-amber">{{ $debtor->incomplete_debt_count }} harga belum diisi</span>
                         @elseif($isLunas)
                             <span class="inline-block rounded-full bg-green-soft px-2.5 py-1 text-[11px] font-semibold text-green">Lunas</span>
                         @else
-                            <span class="font-display text-[15px] font-bold tabular-nums text-ink">Rp {{ number_format($bal, 0, ',', '.') }}</span>
+                            <span class="font-display text-[15px] font-bold tabular-nums {{ $bal < 0 ? 'text-red-600' : 'text-ink' }}">Rp {{ number_format($bal, 0, ',', '.') }}</span>
                         @endif
                     </div>
                 </a>
             @empty
                 <div class="flex flex-col items-center pt-20 text-muted">
-                    <p class="text-sm">Belum ada debtor.</p>
+                    <p class="text-sm">Belum ada pelanggan.</p>
                     <p class="mt-1 text-xs">Tekan tombol + untuk catat utang baru.</p>
                 </div>
             @endforelse

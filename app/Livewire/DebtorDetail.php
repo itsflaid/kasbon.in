@@ -2,13 +2,16 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\EnsuresWarungMembership;
 use App\Models\Debtor;
 use App\Models\Entry;
+use App\Models\WarungMember;
 use App\Services\EntryService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -20,6 +23,9 @@ use Livewire\Component;
  */
 class DebtorDetail extends Component
 {
+    use EnsuresWarungMembership;
+
+    #[Locked]
     public Debtor $debtor;
 
     public bool $showEntryModal = false;
@@ -41,8 +47,9 @@ class DebtorDetail extends Component
         abort_unless($this->debtor->warung_id === (int) session('active_warung_id'), 404);
     }
 
-    #[On('echo-private:warung.{debtor.warung_id},App\\Events\\EntryCreated')]
-    public function onEntryCreated(): void {}
+    #[On('echo-private:warung.{debtor.warung_id},EntryCreated')]
+    #[On('echo-private:warung.{debtor.warung_id},EntryUpdated')]
+    public function onEntryChanged(): void {}
 
     /**
      * @return Collection<int, Entry>
@@ -50,7 +57,7 @@ class DebtorDetail extends Component
     public function getEntriesProperty(): Collection
     {
         return $this->debtor->entries()
-            ->where('is_voided', false)
+            ->active()
             ->with('recordedBy')
             ->latest()
             ->get();
@@ -63,13 +70,13 @@ class DebtorDetail extends Component
 
     public function getEntryCountProperty(): int
     {
-        return $this->debtor->entries()->where('is_voided', false)->count();
+        return $this->debtor->entries()->active()->count();
     }
 
     public function getFirstEntryAtProperty(): ?CarbonImmutable
     {
         return $this->debtor->entries()
-            ->where('is_voided', false)
+            ->active()
             ->oldest()
             ->first()?->created_at;
     }
@@ -90,7 +97,7 @@ class DebtorDetail extends Component
 
     public function editEntry(int $entryId): void
     {
-        $entry = $this->debtor->entries()->findOrFail($entryId);
+        $entry = $this->debtor->entries()->active()->findOrFail($entryId);
 
         Gate::authorize('update', $entry);
 
@@ -103,13 +110,13 @@ class DebtorDetail extends Component
 
     public function saveEntry(): void
     {
-        $entry = $this->debtor->entries()->findOrFail($this->editingEntryId);
+        $entry = $this->debtor->entries()->active()->findOrFail($this->editingEntryId);
 
         Gate::authorize('update', $entry);
 
         $validated = $this->validate([
-            'editAmount' => ['required', 'integer', 'min:1'],
-            'editItemDescription' => ['nullable', 'string', 'max:255'],
+            'editAmount' => ['required', 'integer', 'min:1', 'max:'.Entry::MAX_AMOUNT],
+            'editItemDescription' => ['nullable', 'string', 'max:'.Entry::MAX_DESCRIPTION],
         ]);
 
         app(EntryService::class)->update($entry, [
@@ -122,7 +129,7 @@ class DebtorDetail extends Component
 
     public function voidEntry(int $entryId): void
     {
-        $entry = $this->debtor->entries()->findOrFail($entryId);
+        $entry = $this->debtor->entries()->active()->findOrFail($entryId);
 
         Gate::authorize('update', $entry);
 
@@ -138,11 +145,42 @@ class DebtorDetail extends Component
 
     public function render(): View
     {
+        $entries = $this->entries;
+
         return view('livewire.debtor-detail', [
-            'entries' => $this->entries,
+            'entries' => $entries,
             'total' => $this->total,
             'entryCount' => $this->entryCount,
             'firstEntryAt' => $this->firstEntryAt,
+            'editableEntryIds' => $this->editableEntryIds($entries),
         ]);
+    }
+
+    protected function membershipWarungId(): int
+    {
+        return $this->debtor->warung_id;
+    }
+
+    /**
+     * @param  Collection<int, Entry>  $entries
+     * @return array<int, int>
+     */
+    private function editableEntryIds(Collection $entries): array
+    {
+        $user = auth()->user();
+
+        $member = WarungMember::query()
+            ->where('warung_id', $this->debtor->warung_id)
+            ->where('user_id', $user->id)
+            ->where('is_active', true)
+            ->first();
+
+        $canEditAny = $member !== null
+            && ($member->role === 'owner' || $member->isTrustedEditor());
+
+        return $entries
+            ->filter(fn (Entry $entry): bool => $canEditAny || $entry->recorded_by_user_id === $user->id)
+            ->pluck('id')
+            ->all();
     }
 }

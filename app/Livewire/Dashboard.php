@@ -2,10 +2,13 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\EnsuresWarungMembership;
 use App\Models\Debtor;
 use App\Models\Warung;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -16,21 +19,25 @@ use Livewire\Component;
  */
 class Dashboard extends Component
 {
+    use EnsuresWarungMembership;
+
+    #[Locked]
     public Warung $warung;
 
     public string $search = '';
+
+    public string $filter = 'semua';
+
+    public bool $showModal = false;
 
     public function mount(): void
     {
         $this->warung = Warung::whereKey(session('active_warung_id'))->firstOrFail();
     }
 
-    public string $filter = 'semua';
-
-    public bool $showModal = false;
-
-    #[On('echo-private:warung.{warung.id},App\\Events\\EntryCreated')]
-    public function onEntryCreated(): void {}
+    #[On('echo-private:warung.{warung.id},EntryCreated')]
+    #[On('echo-private:warung.{warung.id},EntryUpdated')]
+    public function onEntryChanged(): void {}
 
     public function openModal(): void
     {
@@ -48,17 +55,49 @@ class Dashboard extends Component
      */
     public function getDebtorsProperty(): Collection
     {
-        return $this->warung->debtors()
-            ->with(['entries' => fn ($q) => $q->where('is_voided', false)->with('recordedBy')])
-            ->when($this->search, fn ($q) => $q->where('name', 'like', "%{$this->search}%"))
+        $query = $this->warung->debtors()
+            ->select(['id', 'warung_id', 'name', 'note', 'created_at'])
+            ->withExists([
+                'entries as has_incomplete_price' => fn (Builder $query) => $query
+                    ->where('type', 'debt')
+                    ->where('is_voided', false)
+                    ->whereNull('amount'),
+            ])
+            ->withCount([
+                'entries as incomplete_debt_count' => fn (Builder $query) => $query
+                    ->where('type', 'debt')
+                    ->where('is_voided', false)
+                    ->whereNull('amount'),
+                'entries as active_entries_count' => fn (Builder $query) => $query
+                    ->where('is_voided', false),
+            ])
+            ->withSum([
+                'entries as debt_total' => fn (Builder $query) => $query
+                    ->where('type', 'debt')
+                    ->where('is_voided', false),
+            ], 'amount')
+            ->withSum([
+                'entries as payment_total' => fn (Builder $query) => $query
+                    ->where('type', 'payment')
+                    ->where('is_voided', false),
+            ], 'amount')
+            ->with(['latestEntry' => fn ($query) => $query->with('recordedBy')]);
+
+        if ($this->search !== '') {
+            $query->whereRaw("name LIKE ? ESCAPE '!'", ['%'.$this->escapeLike($this->search).'%']);
+        }
+
+        return $query
             ->get()
-            ->filter(function ($debtor) {
+            ->filter(function (Debtor $debtor): bool {
                 if ($this->filter === 'belum_lunas') {
-                    return ! $debtor->hasIncompletePrice() && $debtor->total() > 0;
+                    return ! $debtor->has_incomplete_price && $debtor->balance > 0;
                 }
+
                 if ($this->filter === 'lunas') {
-                    return ! $debtor->hasIncompletePrice() && $debtor->total() <= 0
-                        && $debtor->entries->isNotEmpty();
+                    return ! $debtor->has_incomplete_price
+                        && $debtor->balance <= 0
+                        && $debtor->active_entries_count > 0;
                 }
 
                 return true;
@@ -68,23 +107,20 @@ class Dashboard extends Component
 
     public function getTotalProperty(): int
     {
-        $debt = $this->warung->entries()
-            ->where('is_voided', false)
-            ->where('type', 'debt')
-            ->sum('amount');
-        $paid = $this->warung->entries()
-            ->where('is_voided', false)
-            ->where('type', 'payment')
-            ->sum('amount');
+        $total = $this->warung->entries()
+            ->active()
+            ->selectRaw("COALESCE(SUM(CASE WHEN type = 'debt' THEN amount ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total")
+            ->first()
+            ?->getAttribute('total');
 
-        return (int) $debt - (int) $paid;
+        return (int) $total;
     }
 
     public function getHasIncompletePriceProperty(): bool
     {
         return $this->warung->entries()
-            ->where('type', 'debt')
-            ->where('is_voided', false)
+            ->debts()
+            ->active()
             ->whereNull('amount')
             ->exists();
     }
@@ -96,5 +132,15 @@ class Dashboard extends Component
             'total' => $this->total,
             'hasIncompletePrice' => $this->hasIncompletePrice,
         ]);
+    }
+
+    protected function membershipWarungId(): int
+    {
+        return $this->warung->id;
+    }
+
+    private function escapeLike(string $value): string
+    {
+        return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
     }
 }

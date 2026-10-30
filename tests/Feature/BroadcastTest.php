@@ -1,6 +1,7 @@
 <?php
 
 use App\Events\EntryCreated;
+use App\Events\EntryUpdated;
 use App\Models\Entry;
 use App\Models\User;
 use App\Models\Warung;
@@ -38,12 +39,31 @@ it('implements ShouldBroadcast', function () {
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
 });
 
-it('exposes entry via broadcastWith', function () {
+it('exposes minimal entry data via broadcastWith', function () {
     $entry = Entry::factory()->create();
 
     $event = new EntryCreated($entry);
     $data = $event->broadcastWith();
 
-    expect($data)->toHaveKey('entry');
-    expect($data['entry']['id'])->toBe($entry->id);
+    expect($data)->toMatchArray([
+        'entry_id' => $entry->id,
+        'warung_id' => $entry->warung_id,
+        'debtor_id' => $entry->debtor_id,
+        'type' => $entry->type,
+        'amount' => $entry->amount,
+        'action' => 'created',
+    ]);
+});
+
+it('broadcasts updates with the same private warung channel', function () {
+    $entry = Entry::factory()->create();
+    $event = new EntryUpdated($entry, 'voided');
+
+    $channels = $event->broadcastOn();
+
+    expect($event)->toBeInstanceOf(ShouldBroadcast::class)
+        ->and($channels[0])->toBeInstanceOf(PrivateChannel::class)
+        ->and($channels[0]->name)->toBe("private-warung.{$entry->warung_id}")
+        ->and($event->broadcastWith()['action'])->toBe('voided')
+        ->and($event->broadcastWith()['entry_id'])->toBe($entry->id);
 });

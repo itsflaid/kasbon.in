@@ -10,7 +10,7 @@
             <div class="relative flex items-center justify-between gap-4">
                 <div class="flex items-center gap-2.5">
                     <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary font-display text-[13px] font-bold text-white">W</span>
-                    <span class="font-display text-sm font-bold tracking-tight">Warung Utang</span>
+                    <span class="font-display text-sm font-bold tracking-tight">{{ config('app.name') }}</span>
                 </div>
                 <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">{{ now()->format('Y') }} · Buku kas</span>
             </div>

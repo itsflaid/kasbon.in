@@ -33,7 +33,6 @@ it('hides total when incomplete price exists, shows after filled', function () {
     $entry = $debtor->entries()->first();
     $entry->update(['amount' => 25000]);
 
-    $debtor->forgetTotalCache();
     expect($debtor->fresh()->hasIncompletePrice())->toBeFalse();
     expect($debtor->fresh()->total())->toBe(25000);
 });
@@ -91,9 +90,8 @@ it('total reflects voided entries correctly', function () {
     expect($debtor->fresh()->total())->toBe(50000);
 
     $entry = $debtor->entries()->first();
-    $entry->update(['is_voided' => true]);
+    $entry->forceFill(['is_voided' => true])->save();
 
-    $debtor->forgetTotalCache();
     expect($debtor->fresh()->total())->toBe(0);
 });
 

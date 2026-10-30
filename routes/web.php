@@ -11,7 +11,7 @@ use App\Livewire\RiwayatGlobal;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('dashboard'))->name('home');
-Route::get('/login', fn () => redirect()->route('google.redirect'))->name('login');
+Route::view('/login', 'auth.login')->middleware('guest')->name('login');
 
 Route::get('/auth/google/redirect', [AuthController::class, 'redirect'])->name('google.redirect');
 Route::get('/auth/google/callback', [AuthController::class, 'callback'])->middleware('throttle:10,1');
